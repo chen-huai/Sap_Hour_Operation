@@ -1,7 +1,7 @@
 import os
 import subprocess
 
-entry_file = 'Sap_Operate_theme.py'
+entry_file = 'Sap_Hour_Operate_theme.py'
 
 if not os.path.exists(entry_file):
     print(f'未找到主程序入口文件: {entry_file}，请确认文件存在。')
@@ -14,7 +14,7 @@ cmd = [
     '--windowed',
     '--clean',
     '--noconfirm',
-    '--icon=Sap_Operate_Logo.ico',
+    '--icon=ch-4.ico',
     entry_file
 ]
 
