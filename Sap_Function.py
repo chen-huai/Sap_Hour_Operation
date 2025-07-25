@@ -864,8 +864,9 @@ class Sap():
             self.session.findById(f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/ctxtZRUCKDS-ZZTAETIGNR[9,{row_num}]").setFocus()
             self.session.findById(f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/txtZRUCKDS-PZEIT[13,{row_num}]").text = \
             hour_data['allocated_hours']
-            self.session.findById(f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/txtZRUCKDS-BZEIT[15,{row_num}]").text = \
-            hour_data['office_time']
+            # 有office_time才录office_time
+            # self.session.findById(f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/txtZRUCKDS-BZEIT[15,{row_num}]").text = \
+            # hour_data['office_time']
             self.session.findById(f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/txtZRUCKDS-BZEIT[15,{row_num}]").setFocus()
             self.session.findById(
                 f"wnd[0]/usr/tblZIIZRUECKMELD00DYNPRO200/txtZRUCKDS-BZEIT[15,{row_num}]").caretPosition = 1
@@ -875,6 +876,7 @@ class Sap():
         return res
 
     def save_hours(self):
+        # 同个人同个周数统一保存操作
         res = {}
         res['flag'] = 1
         res['msg'] = ''
@@ -896,6 +898,10 @@ class Sap():
                     saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
                     if 'Fixed price item is allready fully invoiced' in saveMessageText:
                         continue
+                    elif 'You must specify a duration with this activity.' in saveMessageText:
+                        res['flag'] = 0
+                        res['msg'] = '小时数不能为0'
+                        break
                     elif 'Data was saved' in saveMessageText:
                         res['msg'] = '录Hour成功'
                         break
@@ -910,8 +916,9 @@ class Sap():
                         res['flag'] = 0
                         res['msg'] = f"保存失败，已重试{max_retries}次。初始错误: {msg}. 最后一次重试错误: {last_retry_error}"
                         # raise Exception(f"保存失败，已重试{max_retries}次。初始错误: {msg}. 最后一次重试错误: {last_retry_error}")
-                    continue
+                    break
         return res
+
 
 # if __name__ == "__main__":
 #     revenue = 230

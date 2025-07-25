@@ -102,7 +102,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_77.clicked.connect(self.get_department_hour)
         self.pushButton_73.clicked.connect(self.get_average_person_hour)
         # self.pushButton_73.clicked.connect(self.get_person_hour)
-        self.pushButton_79.clicked.connect(self.hourOperate)
+        self.pushButton_79.clicked.connect(self.hour_Operate)
         self.pushButton_80.clicked.connect(self.clear_hour_gui)
         self.pushButton_81.clicked.connect(lambda: self.open_file(self.lineEdit_30.text()))
         self.pushButton_82.clicked.connect(lambda: self.open_file(self.lineEdit_37.text()))
@@ -2379,223 +2379,102 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         os.startfile(path)
 
 
-    def hourOperate(self):
+    def hour_Operate(self):
         """
-        处理工时数据并进行SAP操作
+        处理工时数据并进行SAP操作，流程为：登录成功→录入hour成功→保存。
+        只有上一步成功才执行下一步，失败则跳过后续步骤。
+        保留log文件逻辑，必要信息显示在textBrowser_4。
         """
-
         time_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = os.path.join(configContent['Hour_Files_Export_URL'], f'log_{time_str}.xlsx')
         columns = [
-            'ID',
-            'staff_id',
-            'week',
-            'order_no',
-            'allocated_hours',
-            'office_time',
-            'material_code',
-            'item',
-            'allocated_day',
-            'staff_name',
-            'status',
-            'message',
-            'Update'
+            'ID', 'staff_id', 'week', 'order_no', 'allocated_hours', 'office_time',
+            'material_code', 'item', 'allocated_day', 'staff_name', 'status', 'message'
         ]
         log_obj = Logger(log_file=log_file, columns=columns)
         try:
-            # 获取文件路径
             hour_path = self.lineEdit_31.text()
             if not hour_path:
                 QMessageBox.warning(self, "警告", "请先选择工时文件！")
                 return
 
-
-
-            # 获取并处理数据
             get_data = Get_Data()
             raw_data = get_data.getFileTableData(hour_path)
-
-            # 重命名字段
             renamed_data = get_data.rename_hour_fields(raw_data, configContent['Hour_Field_Mapping'])
-
-            # 初始化SAP操作对象
             sap = Sap()
 
-            # 记录当前处理的staff_id和week
-            current_staff_id = None
-            current_week = None
-            is_first_login = True  # 标记是否是第一次登录
-            num = 0
-            # 遍历分组后的数据
-            for _, row in renamed_data.iterrows():
-                num += 1
-                staff_id = row['staff_id']
-                week = row['week']
+            for idx, row in renamed_data.iterrows():
                 log_data = {
-                    'ID': '',
-                    'staff_id': '',
-                    'week': '',
-                    'order_no': '',
-                    'allocated_hours': '',
-                    'office_time': '',
-                    'material_code': '',
-                    'item': '',
-                    'allocated_day': '',
-                    'staff_name': '',
+                    'ID': row.get('ID', idx+1),
+                    'staff_id': row.get('staff_id', ''),
+                    'week': row.get('week', ''),
+                    'order_no': row.get('order_no', ''),
+                    'allocated_hours': row.get('allocated_hours', ''),
+                    'office_time': row.get('office_time', ''),
+                    'material_code': row.get('material_code', ''),
+                    'item': row.get('item', ''),
+                    'allocated_day': row.get('allocated_day', ''),
+                    'staff_name': row.get('staff_name', ''),
                     'status': '',
-                    'message': '',
-                }  # 用于存储日志数据
+                    'message': ''
+                }
 
-                # 如果staff_id或week发生变化，需要重新登录
-                if staff_id != current_staff_id or week != current_week:
-                    # 如果不是第一次登录，需要先保存之前的工时
-                    if not is_first_login:
-                        save_res = sap.save_hours()
-                        if not save_res['flag']:
-                            error_msg = f"保存工时失败！Staff ID: {current_staff_id}, Week: {current_week}"
-                            # logger.error(error_msg)
-                            log_data.update({
-                                'ID': row['ID'],
-                                'staff_id': current_staff_id,
-                                'week': current_week,
-                                'order_no': row['order_no'],
-                                'allocated_hours': row['allocated_hours'],
-                                'office_time': row['office_time'],
-                                'material_code': row['material_code'],
-                                'item': row['item'],
-                                'allocated_day': row['allocated_day'],
-                                'staff_name': row['staff_name'],
-                                'status': 'Failed',
-                                'message': error_msg
-                            })
-
-                    # 登录SAP
-                    login_res = sap.login_hour_gui(row)
-                    if not login_res['flag']:
-                        # logger.error(error_msg):
-                        error_msg = f"登录SAP失败！Staff ID: {staff_id}, Week: {week}"
-                        # logger.error(error_msg)
-                        log_data.update({
-                            'ID': row['ID'],
-                            'staff_id': current_staff_id,
-                            'week': current_week,
-                            'order_no': row['order_no'],
-                            'allocated_hours': row['allocated_hours'],
-                            'office_time': row['office_time'],
-                            'material_code': row['material_code'],
-                            'item': row['item'],
-                            'allocated_day': row['allocated_day'],
-                            'staff_name': row['staff_name'],
-                            'status': 'Failed',
-                            'message': error_msg
-                        })
-
-
-                    current_staff_id = staff_id
-                    current_week = week
-                    is_first_login = False
-
-                # 记录工时
-                try:
-                    hour_data = row
-                    # 调用recording_hours方法记录工时
-                    recording_res = sap.recording_hours(hour_data)
-                    if not recording_res['flag']:
-                        # logger.error(error_msg):
-                        error_msg = f"记录工时失败！Staff ID: {staff_id}, Week: {week}"
-                        # logger.error(error_msg)
-                        log_data.update({
-                            'ID': row['ID'],
-                            'staff_id': current_staff_id,
-                            'week': current_week,
-                            'order_no': row['order_no'],
-                            'allocated_hours': row['allocated_hours'],
-                            'office_time': row['office_time'],
-                            'material_code': row['material_code'],
-                            'item': row['item'],
-                            'allocated_day': row['allocated_day'],
-                            'staff_name': row['staff_name'],
-                            'status': 'Failed',
-                            'message': error_msg
-                        })
-
-
-                    success_msg = f"成功处理 Staff ID: {staff_id}, Week: {week} 的工时数据"
-                    # logger.info(success_msg)
-                    log_data.update({
-                        'ID': row['ID'],
-                        'staff_id': current_staff_id,
-                        'week': current_week,
-                        'order_no': row['order_no'],
-                        'allocated_hours': row['allocated_hours'],
-                        'office_time': row['office_time'],
-                        'material_code': row['material_code'],
-                        'item': row['item'],
-                        'allocated_day': row['allocated_day'],
-                        'staff_name': row['staff_name'],
-                        'status': 'Success',
-                        'message': success_msg
-                    })
-
-                    self.textBrowser_4.append(success_msg)
+                # 工时不能为0
+                if row.get('allocated_hours', '') == '':
+                    msg = f"SAP数据有问题！Item ID: {row.get('ID', idx + 1)}；错误信息：工时不能为0"
+                    log_data['status'] = 'Failed'
+                    log_data['message'] = msg
+                    self.textBrowser_4.append(f"<font color='red'>{msg}</font>")
+                    log_obj.log(log_data)
                     app.processEvents()
+                    continue
 
-                except Exception as e:
-                    error_msg = f"处理工时数据时出错: {str(e)}"
-                    # logger.error(error_msg)
-                    log_data.update({
-                        'ID': row['ID'],
-                        'staff_id': current_staff_id,
-                        'week': current_week,
-                        'order_no': row['order_no'],
-                        'allocated_hours': row['allocated_hours'],
-                        'office_time': row['office_time'],
-                        'material_code': row['material_code'],
-                        'item': row['item'],
-                        'allocated_day': row['allocated_day'],
-                        'staff_name': row['staff_name'],
-                        'status': 'Failed',
-                        'message': error_msg
-                    })
-
-
-                log_obj.log(log_data)
-
-            # 最后一次保存
-            if not is_first_login:
+                # 1. 登录
+                login_res = sap.login_hour_gui(row)
+                if not login_res.get('flag', False):
+                    msg = f"登录SAP失败！Item ID: {row.get('ID', idx+1)}；错误信息：{login_res.get('msg', '未知错误')}"
+                    log_data['status'] = 'Failed'
+                    log_data['message'] = msg
+                    self.textBrowser_4.append(f"<font color='red'>{msg}</font>")
+                    log_obj.log(log_data)
+                    app.processEvents()
+                    continue
+                # 2. 录入hour（仅在登录成功时执行）
+                recording_res = sap.recording_hours(row)
+                if not recording_res.get('flag', False):
+                    msg = f"记录工时失败！Item ID: {row.get('ID', idx+1)}；错误信息：{recording_res.get('msg', '未知错误')}"
+                    log_data['status'] = 'Failed'
+                    log_data['message'] = msg
+                    self.textBrowser_4.append(f"<font color='red'>{msg}</font>")
+                    log_obj.log(log_data)
+                    app.processEvents()
+                    continue
+                # 3. 保存（仅在录入hour成功时执行）
                 save_res = sap.save_hours()
-                if not save_res['flag']:
-                    error_msg = f"最后一次保存工时失败！Staff ID: {current_staff_id}, Week: {current_week}"
-                    # logger.error(error_msg)
-                    log_data.update({
-                        'ID': row['ID'],
-                        'staff_id': current_staff_id,
-                        'week': current_week,
-                        'order_no': row['order_no'],
-                        'allocated_hours': row['allocated_hours'],
-                        'office_time': row['office_time'],
-                        'material_code': row['material_code'],
-                        'item': row['item'],
-                        'allocated_day': row['allocated_day'],
-                        'staff_name': row['staff_name'],
-                        'status': 'Failed',
-                        'message': error_msg
-                    })
+                if not save_res.get('flag', False):
+                    msg = f"保存工时失败！Item ID: {row.get('ID', idx+1)}；错误信息：{save_res.get('msg', '未知错误')}"
+                    log_data['status'] = 'Failed'
+                    log_data['message'] = msg
+                    self.textBrowser_4.append(f"<font color='red'>{msg}</font>")
+                    log_obj.log(log_data)
+                    app.processEvents()
+                    continue
+                # 成功
+                msg = f"成功处理 Item ID: {row.get('ID', idx+1)} 的工时数据"
+                log_data['status'] = 'Success'
+                log_data['message'] = msg
+                self.textBrowser_4.append(msg)
+                log_obj.log(log_data)
+                app.processEvents()
 
-
-            # 将日志数据保存为Excel文件
             log_obj.save_log_to_excel()
-            self.textBrowser_4.append("完成", f"所有工时数据处理完成！\n日志文件保存在：{log_file}")
+            self.textBrowser_4.append(f"所有工时数据处理完成！日志文件保存在：{log_file}")
             os.startfile(log_file)
             app.processEvents()
-
         except Exception as e:
             log_obj.save_log_to_excel()
-            os.startfile(log_file)
             self.textBrowser_4.append(f"错误：处理过程中出现错误: {str(e)}\n日志文件保存在：{log_file}")
-            # error_msg = f"处理过程中出现错误: {str(e)}"
-            # logger.error(error_msg)
-            # QMessageBox.critical(self, "错误", error_msg)
+            os.startfile(log_file)
 
 
 if __name__ == "__main__":
