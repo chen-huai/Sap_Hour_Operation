@@ -2420,7 +2420,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                 }
 
                 # 工时不能为0
-                if row.get('allocated_hours', '') == '':
+                if row.get('allocated_hours', '') == '' or row.get('allocated_hours', '') == 0:
                     msg = f"SAP数据有问题！Item ID: {row.get('ID', idx + 1)}；错误信息：工时不能为0"
                     log_data['status'] = 'Failed'
                     log_data['message'] = msg
@@ -2439,6 +2439,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     log_obj.log(log_data)
                     app.processEvents()
                     continue
+
                 # 2. 录入hour（仅在登录成功时执行）
                 recording_res = sap.recording_hours(row)
                 if not recording_res.get('flag', False):
@@ -2449,6 +2450,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     log_obj.log(log_data)
                     app.processEvents()
                     continue
+
                 # 3. 保存（仅在录入hour成功时执行）
                 save_res = sap.save_hours()
                 if not save_res.get('flag', False):
@@ -2459,6 +2461,7 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                     log_obj.log(log_data)
                     app.processEvents()
                     continue
+
                 # 成功
                 msg = f"成功处理 Item ID: {row.get('ID', idx+1)} 的工时数据"
                 log_data['status'] = 'Success'
