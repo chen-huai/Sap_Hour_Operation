@@ -673,7 +673,13 @@ class RevenueAllocator:
             # 第二步：按部门分配工时
             for dept, stats in dept_stats.items():
                 if not stats['records']:
+                    print(f"Skipping department {dept}: no records to allocate")
                     continue
+
+                print(f"\nStarting allocation for department: {dept}")
+                print(f"Department staff count: {len(stats['staff_list'])}")
+                print(f"Department records count: {len(stats['records'])}")
+                print(f"Total hours to allocate: {sum(r['dept_hours'] for r in stats['records'])}")
 
                 records = stats['records']
                 staff_list = stats['staff_list']
@@ -682,6 +688,7 @@ class RevenueAllocator:
                 staff_target_hours = {staff: avg_hours_per_staff for staff in staff_list}
 
                 total_remaining = sum(r['dept_hours'] for r in records)
+                print(f"Initial total_remaining: {total_remaining}")
 
                 # 统计本月每个人的历史工时
                 history_hours = {staff: 0 for staff in staff_list}
@@ -693,6 +700,9 @@ class RevenueAllocator:
                 total_to_allocate = sum(r['dept_hours'] for r in records)
                 total_history = sum(history_hours.values())
                 avg_hours_per_staff = (total_to_allocate + total_history) / len(staff_list)
+
+                print(f"Average hours per staff: {avg_hours_per_staff}")
+                print(f"Total history hours: {total_history}")
 
                 # 初始化tracker为历史工时
                 staff_hours_tracker = history_hours.copy()
@@ -708,8 +718,51 @@ class RevenueAllocator:
                     available_staff = [s for s in staff_list if staff_hours_tracker[s] < avg_hours_per_staff]
                     if not available_staff:
                         available_staff = staff_list
+                    
+                    # 检查是否当前部门所有人都无法分配（所有人员在所有日期都达到上限）
+                    all_staff_full = True
+                    for staff in staff_list:  # 只检查当前部门的人员
+                        for day in work_days:
+                            if self._get_weekly_records_count(staff, self._get_week_number(day)) < 14:
+                                staff_current_hours = self._get_staff_daily_hours(day, staff)
+                                if staff_current_hours < actual_max_hours:
+                                    all_staff_full = False
+                                    break
+                        if not all_staff_full:
+                            break
+                    
+                    if all_staff_full:
+                        print(f"Warning: All staff in department {dept} have reached their limits, stopping allocation. Remaining hours: {total_remaining}")
+                        # 收集所有未分配工时
+                        for record in records:
+                            if record['dept_hours'] > 1e-6:
+                                unallocated_data.append({
+                                    'order_no': record['order_no'],
+                                    'dept': dept,
+                                    'material_code': record['material_code'],
+                                    'item': record['item'],
+                                    'remaining_hours': round(record['dept_hours'], significant_digits),
+                                    'original_hours': record['original_hours'],
+                                    'check_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                })
+                        break
+                    
                     staff_name = available_staff[staff_idx % len(available_staff)]
                     work_day = work_days[day_idx]
+
+                    # 检查当前人员是否在所有日期都达到上限
+                    current_staff_full = True
+                    for day in work_days:
+                        if self._get_weekly_records_count(staff_name, self._get_week_number(day)) < 14:
+                            staff_current_hours = self._get_staff_daily_hours(day, staff_name)
+                            if staff_current_hours < actual_max_hours:
+                                current_staff_full = False
+                                break
+                    
+                    if current_staff_full:
+                        print(f"Staff {staff_name} has reached all limits, skipping to next staff")
+                        staff_idx = (staff_idx + 1) % len(available_staff)
+                        continue
 
                     # 检查周记录上限
                     if self._get_weekly_records_count(staff_name, self._get_week_number(work_day)) >= 14:
@@ -721,7 +774,7 @@ class RevenueAllocator:
                     staff_current_hours = self._get_staff_daily_hours(work_day, staff_name)
                     daily_capacity = actual_max_hours - staff_current_hours
                     if daily_capacity <= 1e-6:
-                        staff_idx = (staff_idx + 1) % len(available_staff)
+                        # 当前日期该人员已满，尝试下一天
                         day_idx = (day_idx + 1) % day_count
                         continue
 
@@ -744,7 +797,7 @@ class RevenueAllocator:
                             can_allocate = avg_hours_per_staff - staff_hours_tracker[staff_name]
 
                     if can_allocate <= 1e-6:
-                        staff_idx = (staff_idx + 1) % len(available_staff)
+                        # 无法分配，尝试下一天
                         day_idx = (day_idx + 1) % day_count
                         continue
 
@@ -776,7 +829,7 @@ class RevenueAllocator:
                     else:
                         no_progress_count = 0
                     if no_progress_count > max_no_progress:
-                        print(f"Warning: Allocation stuck, breaking to avoid infinite loop. Remaining hours: {total_remaining}")
+                        print(f"Warning: Allocation stuck for department {dept}, breaking to avoid infinite loop. Remaining hours: {total_remaining}")
                         for record in records:
                             if record['dept_hours'] > 1e-6:
                                 unallocated_data.append({
@@ -789,6 +842,8 @@ class RevenueAllocator:
                                     'check_date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 })
                         break
+
+                print(f"Completed allocation for department {dept}. Final remaining: {total_remaining}")
 
                 # 分配结束后，检查records列表中是否还有剩余（dept_hours已被实时更新）
                 for record in records:
