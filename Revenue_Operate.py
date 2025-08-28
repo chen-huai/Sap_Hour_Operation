@@ -338,8 +338,8 @@ class RevenueAllocator:
         if 'week' not in self.hours_data.columns:
             self.hours_data['week'] = self.hours_data['date'].apply(self._get_week_number)
         else:
-            # 确保week列是整数类型
-            self.hours_data['week'] = self.hours_data['week'].astype(int)
+            # 确保week列是整数类型，先处理NaN值
+            self.hours_data['week'] = self.hours_data['week'].fillna(0).astype(int)
         
         # 确保staff_name列存在
         if 'staff_name' not in self.hours_data.columns:
@@ -636,38 +636,14 @@ class RevenueAllocator:
                 # 获取该部门的所有记录
                 dept_records = [r for r in filtered if r['dept'] == dept]
                 
-                # 合并小工时记录
-                merged_records = []
-                small_hours_records = []
-                
-                for record in dept_records:
-                    if record['dept_hours'] < 0.5:
-                        small_hours_records.append(record)
-                    else:
-                        merged_records.append(record)
-                
-                # 如果有小工时记录，尝试合并到其他记录中
-                if small_hours_records:
-                    total_small_hours = sum(r['dept_hours'] for r in small_hours_records)
-                    if merged_records:
-                        # 按比例分配小工时到其他记录
-                        for record in merged_records:
-                            ratio = record['dept_hours'] / sum(r['dept_hours'] for r in merged_records)
-                            record['dept_hours'] += total_small_hours * ratio
-                    else:
-                        # 如果没有其他记录，创建一个新记录
-                        if small_hours_records:
-                            new_record = small_hours_records[0].copy()
-                            new_record['dept_hours'] = total_small_hours
-                            merged_records.append(new_record)
-                
+                # 保持所有记录独立，不合并小工时记录
                 dept_stats[dept] = {
                     'total_hours': total_hours,
                     'avg_hours_per_staff': avg_hours_per_staff,
                     'actual_max_hours': actual_max_hours,
                     'staff_list': staff_list,
                     'staff_hours_tracker': {staff: 0 for staff in staff_list},
-                    'records': merged_records
+                    'records': dept_records
                 }
 
             # 第二步：按部门分配工时
@@ -783,11 +759,18 @@ class RevenueAllocator:
                     if not valid_records:
                         break
 
-                    # 找到工时最多的记录进行分配
-                    record_to_process = max(valid_records, key=lambda x: x['dept_hours'])
-
-                    # 计算本次最大可分配小时
-                    can_allocate = min(daily_capacity, record_to_process['dept_hours'])
+                    # 检查是否有小于1小时的记录，如果有优先分配给同一个人
+                    small_hour_records = [r for r in valid_records if r['dept_hours'] < 1.0]
+                    if small_hour_records:
+                        # 找到第一个小于1小时的记录，分配给当前员工
+                        record_to_process = small_hour_records[0]
+                        # 尝试分配全部剩余工时，即使超过daily_capacity限制
+                        can_allocate = record_to_process['dept_hours']
+                    else:
+                        # 找到工时最多的记录进行分配
+                        record_to_process = max(valid_records, key=lambda x: x['dept_hours'])
+                        # 计算本次最大可分配小时
+                        can_allocate = min(daily_capacity, record_to_process['dept_hours'])
                     # 如果本次分配后会超过平均值，但超出部分在1小时以内，允许全部分配，避免零碎
                     if staff_hours_tracker[staff_name] < avg_hours_per_staff:
                         over_amount = staff_hours_tracker[staff_name] + can_allocate - avg_hours_per_staff
