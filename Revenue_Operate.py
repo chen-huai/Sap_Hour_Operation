@@ -140,11 +140,19 @@ class RevenueAllocator:
         current_hours = self._get_staff_daily_hours(date, staff_name)
         return max(0, max_hours_per_day - current_hours)
 
-    def allocate_department_hours(self, revenueData, configContent):
+    def allocate_department_hours(self, revenueData, configContent, return_format='hours'):
         """动态配置的收入分配计算方法"""
-        material_code = revenueData.get('Material Code', '')
-        base = (float(revenueData['Revenue']) - float(revenueData['Total Subcon Cost']) / 1.06) * float(
+        amount_with_vat = revenueData.get('Tax-inclusive amount', 0)
+        amount = float(amount_with_vat) / 1.06
+        if amount_with_vat != 0:
+            act_revenue = float(revenueData['Tax-inclusive amount']) * float(revenueData['Rate']) / 1.06
+        else:
+            # 当没有含税金额时直接使用Revenue
+            act_revenue = float(revenueData['Revenue'])
+
+        base = (act_revenue - float(revenueData['Total Subcon Cost']) / 1.06) * float(
             configContent.get('Plan_Cost_Parameter'))
+        material_code = revenueData.get('Material Code', '')
         primary_cs = revenueData.get('Primary CS', '')  # 获取Primary CS字段
 
         # 获取有效位数配置
@@ -153,10 +161,11 @@ class RevenueAllocator:
         result = {
             'business_dept_1000_revenue': 0, 'lab_1000_revenue': 0, 'business_dept_1000_hours': 0, 'lab_1000_hours': 0,
             'business_dept_2000_revenue': 0, 'lab_2000_revenue': 0, 'business_dept_2000_hours': 0, 'lab_2000_hours': 0,
-            'lab_1000': '', 'lab_2000': '', 'order_no': revenueData.get('Order Number', ''),
-            'material_code_1000': '',
-            'material_code_2000': '',
-            'primary_cs': primary_cs  # 添加Primary CS字段
+            'item_1000_amount': 0, 'item_2000_amount': 0, 'lab_1000': '', 'lab_2000': '',
+            'lab_1000_act_revenue': 0, 'lab_2000_act_revenue': 0, 'business_dept_1000_act_revenue': 0,
+            'business_dept_2000_act_revenue': 0,
+            'order_no': revenueData.get('Order Number', ''),
+            'material_code_1000': '', 'material_code_2000': '', 'primary_cs': primary_cs
         }
 
         # 统一使用 Business_Department 配置
@@ -173,30 +182,39 @@ class RevenueAllocator:
 
             # 计算并格式化金额和工时
             business_dept_1000_revenue = round(base * (1 - lab_cost), 2)
+            business_dept_1000_act_revenue = round(act_revenue * (1 - lab_cost), 2),
             lab_1000_revenue = round(base * lab_cost, 2)
+            lab_1000_act_revenue = round(act_revenue * lab_rate, 2),
             business_dept_1000_hours = round((base * (1 - lab_cost)) / business_dept_rate, significant_digits)
             lab_1000_hours = round((base * lab_cost) / lab_rate, significant_digits)
 
             result.update({
+                'item_1000_amount': amount,
                 'business_dept_1000_revenue': business_dept_1000_revenue,
+                'business_dept_1000_act_revenue': business_dept_1000_act_revenue,
                 'lab_1000_revenue': lab_1000_revenue,
+                'lab_1000_act_revenue': lab_1000_act_revenue,
                 'business_dept_1000_hours': business_dept_1000_hours,
                 'lab_1000_hours': lab_1000_hours,
                 'lab_1000': lab,
                 'material_code_1000': material_code
             })
         else:
-            # 情况2: 存在特殊配置
+            # 情况2: 存在特殊配置，根据MC选择实验室分配
             rule = configContent.get(material_code, 'PHY_1000/CHM_2000').split('/')
+
+            # 物料代码中提取项目类型（第二个部分）'T20-430-A2' 中的 '430'
             item_type = material_code.split('-')[1]
 
+            # 项目类型获取项目比例,实验室之间的分配比例8:2
             proportion_1000 = float(configContent.get(f"{item_type}_Item_1000", 0.8))
             proportion_2000 = float(configContent.get(f"{item_type}_Item_2000", 0.2))
 
+            # 项目类型获取实验室,PHY_1000中的PHY
             lab_1000 = rule[0].split('_')[0]
             lab_2000 = rule[1].split('_')[0]
 
-            # 获取实验室参数
+            # 获取实验室参数，实验室与业务线分配比例6:4或7:3
             lab_1000_cost = float(configContent.get(f"{lab_1000}_Cost_Parameter", 0.3))
             lab_2000_cost = float(configContent.get(f"{lab_2000}_Cost_Parameter", 0.3))
             lab_1000_rate = float(configContent.get(f"{lab_1000}_Hourly_Rate", 342))
@@ -204,11 +222,16 @@ class RevenueAllocator:
             business_dept_rate = float(configContent.get(f"{business_dept}_Hourly_Rate", 315))
 
             # 计算并格式化金额和工时
+            item_1000_amount = amount * proportion_1000
+            item_2000_amount = amount * proportion_2000
             business_dept_1000_revenue = round(base * proportion_1000 * (1 - lab_1000_cost), 2)
+            business_dept_1000_act_revenue = round(act_revenue * proportion_1000 * (1 - lab_1000_cost), 2),
             lab_1000_revenue = round(base * proportion_1000 * lab_1000_cost, 2)
+            lab_1000_act_revenue = round(act_revenue * proportion_1000 * lab_1000_cost, 2),
             business_dept_2000_revenue = round(base * proportion_2000 * (1 - lab_2000_cost), 2)
+            business_dept_2000_act_revenue = round(act_revenue * proportion_2000 * (1 - lab_2000_cost), 2),
             lab_2000_revenue = round(base * proportion_2000 * lab_2000_cost, 2)
-
+            lab_2000_act_revenue = round(act_revenue * proportion_2000 * lab_2000_cost, 2),
             business_dept_1000_hours = round((base * proportion_1000 * (1 - lab_1000_cost)) / business_dept_rate,
                                              significant_digits)
             lab_1000_hours = round((base * proportion_1000 * lab_1000_cost) / lab_1000_rate, significant_digits)
@@ -217,10 +240,16 @@ class RevenueAllocator:
             lab_2000_hours = round((base * proportion_2000 * lab_2000_cost) / lab_2000_rate, significant_digits)
 
             result.update({
+                'item_1000_amount': item_1000_amount,
+                'item_2000_amount': item_2000_amount,
                 'business_dept_1000_revenue': business_dept_1000_revenue,
+                'business_dept_1000_act_revenue': business_dept_1000_act_revenue,
                 'lab_1000_revenue': lab_1000_revenue,
+                'lab_1000_act_revenue': lab_1000_act_revenue,
                 'business_dept_2000_revenue': business_dept_2000_revenue,
+                'business_dept_2000_act_revenue': business_dept_2000_act_revenue,
                 'lab_2000_revenue': lab_2000_revenue,
+                'lab_2000_act_revenue': lab_2000_act_revenue,
                 'business_dept_1000_hours': business_dept_1000_hours,
                 'lab_1000_hours': lab_1000_hours,
                 'business_dept_2000_hours': business_dept_2000_hours,
@@ -231,49 +260,53 @@ class RevenueAllocator:
                 'material_code_2000': configContent.get(f"{material_code}_mc").split('/')[1]
             })
 
-        # 在返回结果前增加数据结构整理
-        return [
-            {  # 1000业务部门
-                'order_no': revenueData['Order Number'],
-                'material_code': result.get("material_code_1000"),
-                'item': '1000',
-                'dept': business_dept,
-                'dept_revenue': round(result['business_dept_1000_revenue'], 2),
-                'dept_hours': round(result['business_dept_1000_hours'], significant_digits),
-                'original_hours': round(result['business_dept_1000_hours'], significant_digits),
-                'primary_cs': result['primary_cs']  # 添加Primary CS字段
-            },
-            {  # 1000实验室
-                'order_no': revenueData['Order Number'],
-                'material_code': result.get("material_code_1000"),
-                'item': '1000',
-                'dept': result['lab_1000'],
-                'dept_revenue': round(result['lab_1000_revenue'], 2),
-                'dept_hours': round(result['lab_1000_hours'], significant_digits),
-                'original_hours': round(result['lab_1000_hours'], significant_digits),
-                'primary_cs': result['primary_cs']  # 添加Primary CS字段
-            },
-            {  # 2000业务部门
-                'order_no': revenueData['Order Number'],
-                'material_code': result.get("material_code_2000"),
-                'item': '2000',
-                'dept': business_dept,
-                'dept_revenue': round(result['business_dept_2000_revenue'], 2),
-                'dept_hours': round(result['business_dept_2000_hours'], significant_digits),
-                'original_hours': round(result['business_dept_2000_hours'], significant_digits),
-                'primary_cs': result['primary_cs']  # 添加Primary CS字段
-            },
-            {  # 2000实验室
-                'order_no': revenueData['Order Number'],
-                'material_code': result.get("material_code_2000"),
-                'item': '2000',
-                'dept': result['lab_2000'],
-                'dept_revenue': round(result['lab_2000_revenue'], 2),
-                'dept_hours': round(result['lab_2000_hours'], significant_digits),
-                'original_hours': round(result['lab_2000_hours'], significant_digits),
-                'primary_cs': result['primary_cs']  # 添加Primary CS字段
-            }
-        ]
+        #     根据返回格式进行数据结构调整
+        if return_format == 'hours':
+            # 在返回结果前增加数据结构整理
+            return [
+                {  # 1000业务部门
+                    'order_no': revenueData['Order Number'],
+                    'material_code': result.get("material_code_1000"),
+                    'item': '1000',
+                    'dept': business_dept,
+                    'dept_revenue': round(result['business_dept_1000_revenue'], 2),
+                    'dept_hours': round(result['business_dept_1000_hours'], significant_digits),
+                    'original_hours': round(result['business_dept_1000_hours'], significant_digits),
+                    'primary_cs': result['primary_cs']  # 添加Primary CS字段
+                },
+                {  # 1000实验室
+                    'order_no': revenueData['Order Number'],
+                    'material_code': result.get("material_code_1000"),
+                    'item': '1000',
+                    'dept': result['lab_1000'],
+                    'dept_revenue': round(result['lab_1000_revenue'], 2),
+                    'dept_hours': round(result['lab_1000_hours'], significant_digits),
+                    'original_hours': round(result['lab_1000_hours'], significant_digits),
+                    'primary_cs': result['primary_cs']  # 添加Primary CS字段
+                },
+                {  # 2000业务部门
+                    'order_no': revenueData['Order Number'],
+                    'material_code': result.get("material_code_2000"),
+                    'item': '2000',
+                    'dept': business_dept,
+                    'dept_revenue': round(result['business_dept_2000_revenue'], 2),
+                    'dept_hours': round(result['business_dept_2000_hours'], significant_digits),
+                    'original_hours': round(result['business_dept_2000_hours'], significant_digits),
+                    'primary_cs': result['primary_cs']  # 添加Primary CS字段
+                },
+                {  # 2000实验室
+                    'order_no': revenueData['Order Number'],
+                    'material_code': result.get("material_code_2000"),
+                    'item': '2000',
+                    'dept': result['lab_2000'],
+                    'dept_revenue': round(result['lab_2000_revenue'], 2),
+                    'dept_hours': round(result['lab_2000_hours'], significant_digits),
+                    'original_hours': round(result['lab_2000_hours'], significant_digits),
+                    'primary_cs': result['primary_cs']  # 添加Primary CS字段
+                }
+            ]
+        else:
+            return result
 
     # 新增工作日生成方法
     def generate_work_days(self, start_date, end_date):
