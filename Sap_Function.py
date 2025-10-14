@@ -881,42 +881,65 @@ class Sap():
         res['flag'] = 1
         res['msg'] = ''
         try:
+            # 第一种情况是直接按保存按钮，保存成功
             self.session.findById("wnd[0]/tbar[0]/btn[11]").press()
-            self.session.findById("wnd[1]/usr/btnSPOP-OPTION1").press()
-
+            saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
+            if 'Data was saved' in saveMessageText:
+                res['msg'] = '录Hour成功'
+            else:
+                max_retries = 3  # 最大重试次数
+                retry_count = 0
+                last_retry_error = None
+                while retry_count < max_retries:
+                    try:
+                        # 第二种情况，按一次回车保存成功
+                        self.session.findById("wnd[0]").sendVKey(0)
+                        saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
+                        if 'Data was saved' in saveMessageText:
+                            res['msg'] = '录Hour成功'
+                            break
+                        else:
+                            # 第三种情况，按回车弹窗，需要再次回车或按弹窗按钮确认
+                            # # 勾选弹窗，勾选弹窗最后一步会直接保存
+                            # self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
+                            self.session.findById("wnd[0]").sendVKey(0)
+                            saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
+                            if 'Data was saved' in saveMessageText:
+                                res['msg'] = '录Hour成功'
+                                break
+                            elif 'You must specify a duration with this activity.' in saveMessageText:
+                                res['flag'] = 0
+                                res['msg'] = '小时数不能为0'
+                                break
+                            else:
+                                self.session.findById("wnd[0]/tbar[0]/btn[11]").press()
+                                saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
+                                if 'Data was saved' in saveMessageText:
+                                    res['msg'] = '录Hour成功'
+                                    break
+                                self.session.findById("wnd[1]/usr/btnSPOP-OPTION1").press()
+                                saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
+                                if 'Data was saved' in saveMessageText:
+                                    res['msg'] = '录Hour成功'
+                                    break
+                                else:
+                                    retry_count += 1
+                                    if retry_count >= max_retries:
+                                        res['flag'] = 0
+                                        res['msg'] = f"保存失败，已重试{max_retries}次，仍未成功"
+                                        break
+                    except Exception as retry_error:
+                        last_retry_error = retry_error
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            res['flag'] = 0
+                            res[
+                                'msg'] = f"保存失败，已重试{max_retries}次。错误:{last_retry_error}"
+                            # raise Exception(f"保存失败，已重试{max_retries}次。初始错误: {msg}. 最后一次重试错误: {last_retry_error}")
+                            break
         except Exception as msg:
-            max_retries = 14  # 最大重试次数
-            retry_count = 0
-            last_retry_error = None
-            while retry_count < max_retries:
-                try:
-                    # 回车
-                    self.session.findById("wnd[0]").sendVKey(0)
-                    # # 勾选弹窗，勾选弹窗最后一步会直接保存
-                    # self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-                    self.session.findById("wnd[0]").sendVKey(0)
-                    saveMessageText = self.session.findById("wnd[0]/sbar/pane[0]").text
-                    if 'Fixed price item is allready fully invoiced' in saveMessageText:
-                        continue
-                    elif 'You must specify a duration with this activity.' in saveMessageText:
-                        res['flag'] = 0
-                        res['msg'] = '小时数不能为0'
-                        break
-                    elif 'Data was saved' in saveMessageText:
-                        res['msg'] = '录Hour成功'
-                        break
-                    else:
-                        self.session.findById("wnd[0]/tbar[0]/btn[11]").press()
-                        self.session.findById("wnd[1]/usr/btnSPOP-OPTION1").press()
-                        break
-                except Exception as retry_error:
-                    last_retry_error = retry_error
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        res['flag'] = 0
-                        res['msg'] = f"保存失败，已重试{max_retries}次。初始错误: {msg}. 最后一次重试错误: {last_retry_error}"
-                        # raise Exception(f"保存失败，已重试{max_retries}次。初始错误: {msg}. 最后一次重试错误: {last_retry_error}")
-                    break
+            res['flag'] = 0
+            res['msg'] = f"保存失败，错误: {msg}"
         return res
 
 
