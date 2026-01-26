@@ -1,0 +1,22 @@
+/build
+/dist
+/.idea
+/.vscode
+/.git
+/.claude
+/.env
+/backup
+/billing data
+/test
+*.json
+/downloads
+*.exe
+__pycache__/
+*.pyc
+/test_archive
+*backup*
+*test*
+
+
+
+
