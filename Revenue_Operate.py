@@ -175,7 +175,7 @@ class RevenueAllocator:
         # 情况1: 配置不存在
         if material_code not in configContent:
             prefix = material_code.split('-')[0]
-            lab = configContent.get(prefix)
+            lab = configContent.get(prefix,'PHY')
 
             lab_cost = float(configContent.get(f"{lab}_Cost_Parameter", 0.3))
             lab_rate = float(configContent.get(f"{lab}_Hourly_Rate", 342))
@@ -228,7 +228,7 @@ class RevenueAllocator:
             business_dept_1000_revenue = round(base * proportion_1000 * (1 - lab_1000_cost), 2)
             business_dept_1000_act_revenue = round((act_revenue - untaxed_cost) * proportion_1000 * (1 - lab_1000_cost), 2)
             lab_1000_revenue = round(base * proportion_1000 * lab_1000_cost, 2)
-            lab_1000_act_revenue = round((act_revenue - untaxed_cost) * proportion_1000 * lab_1000_cost, 2),
+            lab_1000_act_revenue = round((act_revenue - untaxed_cost) * proportion_1000 * lab_1000_cost, 2)
             business_dept_2000_revenue = round(base * proportion_2000 * (1 - lab_2000_cost), 2)
             business_dept_2000_act_revenue = round((act_revenue - untaxed_cost) * proportion_2000 * (1 - lab_2000_cost), 2)
             lab_2000_revenue = round(base * proportion_2000 * lab_2000_cost, 2)
