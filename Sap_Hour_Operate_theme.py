@@ -12,7 +12,7 @@ import datetime
 import chicon  # 引用图标
 # from PyQt5 import QtCore, QtGui, QtWidgets
 # from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QVBoxLayout, QPushButton, QAction
+from PyQt5.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QVBoxLayout, QPushButton, QAction, QLabel
 from PyQt5.QtCore import QDate
 from PyQt5.QtGui import QIcon
 from Get_Data import *
@@ -27,6 +27,11 @@ from theme_manager_theme import ThemeManager
 from Revenue_Operate import *
 import qt_material
 import shutil
+import logging
+
+# 导入自动更新模块
+from auto_updater import AutoUpdater, UI_AVAILABLE
+from auto_updater.config_constants import CURRENT_VERSION
 
 
 
@@ -36,6 +41,9 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, parent=None):
         super(MyMainWindow, self).__init__(parent)
         self.setupUi(self)
+
+        # 初始化日志记录器
+        self.logger = logging.getLogger(__name__)
 
         self.theme_manager = ThemeManager(QApplication.instance())
         self.init_theme_action()
@@ -110,6 +118,12 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.pushButton_84.clicked.connect(lambda: self.open_file(self.lineEdit_31.text()))
         self.filesUrl = []
 
+        # 集成自动更新功能
+        self._setup_auto_update()
+
+        # 在状态栏显示版本号
+        self._setup_status_bar()
+
     def init_theme_action(self):
         theme_action = QAction(QIcon('theme_icon.png'), 'Toggle Theme', self)
         theme_action.setStatusTip('Toggle Theme')
@@ -127,6 +141,125 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
     def toggle_theme(self):
         self.theme_manager.set_random_theme()
         # 可以在这里添加其他需要在主题切换后更新的UI元素
+
+    def _setup_status_bar(self):
+        """设置状态栏，永久显示版本号"""
+        try:
+            # 创建版本标签
+            version_label = QLabel(f"当前版本: {CURRENT_VERSION}")
+            version_label.setStyleSheet("padding: 0px 10px;")  # 添加左右内边距
+
+            # 使用 addPermanentWidget 永久显示在状态栏右侧
+            # 这样不会被其他临时消息覆盖
+            self.statusBar().addPermanentWidget(version_label)
+
+            self.logger.info(f"状态栏永久显示版本号: {CURRENT_VERSION}")
+        except Exception as e:
+            self.logger.error(f"设置状态栏失败: {e}", exc_info=True)
+
+    def _setup_auto_update(self):
+        """设置自动更新功能"""
+        try:
+            if UI_AVAILABLE:
+                # 初始化自动更新器
+                self.auto_updater = AutoUpdater(self)
+
+                # 连接Update按钮到更新检查功能
+                self.actionUpdate.triggered.connect(
+                    self._on_check_update_clicked
+                )
+
+                # 启动时静默检查更新（开发环境会自动跳过）
+                self._startup_update_check()
+
+                self.logger.info("自动更新功能初始化成功")
+            else:
+                self.logger.warning("UI组件不可用，跳过自动更新功能初始化")
+                self.auto_updater = None
+
+        except Exception as e:
+            self.logger.error(f"自动更新器初始化失败: {e}", exc_info=True)
+            self.auto_updater = None
+
+    def _on_check_update_clicked(self):
+        """处理Update按钮点击事件"""
+        try:
+            if self.auto_updater:
+                self.logger.info("用户手动触发更新检查")
+                # 强制检查更新并显示UI
+                self.auto_updater.check_for_updates_with_ui(force_check=True)
+            else:
+                self.logger.warning("自动更新器未初始化")
+                QMessageBox.warning(
+                    self,
+                    "更新功能不可用",
+                    "自动更新功能初始化失败，请检查日志或联系技术支持。"
+                )
+        except Exception as e:
+            self.logger.error(f"检查更新失败: {e}", exc_info=True)
+            QMessageBox.warning(
+                self,
+                "检查更新失败",
+                f"检查更新时发生错误：{str(e)}"
+            )
+
+    def _startup_update_check(self):
+        """应用启动时静默检查更新"""
+        try:
+            if self.auto_updater:
+                # 使用定时器延迟1秒执行，避免阻塞主窗口启动
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(1000, self._perform_silent_check)
+
+        except Exception as e:
+            self.logger.error(f"启动更新检查失败: {e}", exc_info=True)
+
+    def _perform_silent_check(self):
+        """执行静默更新检查"""
+        try:
+            has_update, remote_version, local_version, error = \
+                self.auto_updater.check_for_updates(
+                    force_check=False,
+                    is_silent=True
+                )
+
+            if has_update:
+                self.logger.info(f"发现新版本: {remote_version} (当前版本: {local_version})")
+                # 显示更新提示对话框
+                reply = QMessageBox.question(
+                    self,
+                    "发现新版本",
+                    f"检测到新版本 {remote_version} (当前版本: {local_version})\n\n"
+                    f"是否立即查看更新详情?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+
+                if reply == QMessageBox.Yes:
+                    # 用户选择查看更新，显示完整更新UI
+                    self.auto_updater.check_for_updates_with_ui(force_check=True)
+            elif error:
+                # 静默模式下仅记录错误，不显示给用户
+                self.logger.debug(f"启动更新检查: {error}")
+
+        except Exception as e:
+            # 静默模式下仅记录错误，不影响应用启动
+            self.logger.debug(f"静默更新检查异常: {e}")
+
+    def closeEvent(self, event):
+        """应用退出事件处理"""
+        try:
+            # 清理自动更新器资源
+            if hasattr(self, 'auto_updater') and self.auto_updater:
+                self.logger.info("正在清理自动更新器资源...")
+                self.auto_updater.cleanup()
+                self.auto_updater = None
+
+        except Exception as e:
+            self.logger.error(f"清理自动更新器资源失败: {e}", exc_info=True)
+
+        # 接受关闭事件
+        event.accept()
 
     def getConfig(self):
         # 初始化，获取或生成配置文件
@@ -478,9 +611,14 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
                           "人生苦短，码上行乐。\n\n\n        ----Frank Chen")
 
     def showVersion(self):
-        # 关于作者
-        QMessageBox.about(self, "版本",
-                          "V 22.01.11\n\n\n 2022-04-26")
+        """显示版本信息"""
+        try:
+            version_info = f"SAP 小时操作工具\n\n当前版本: {CURRENT_VERSION}\n\n© 2022-2024 Frank Chen"
+            QMessageBox.about(self, "版本", version_info)
+        except Exception as e:
+            self.logger.error(f"显示版本信息失败: {e}", exc_info=True)
+            # 降级处理：显示固定版本
+            QMessageBox.about(self, "版本", f"当前版本: {CURRENT_VERSION}")
 
     def getAmountVat(self):
         amount = float(self.doubleSpinBox_2.text())

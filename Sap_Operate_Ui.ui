@@ -7,8 +7,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1113</width>
-    <height>771</height>
+    <width>1167</width>
+    <height>803</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -1192,8 +1192,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>429</width>
-             <height>554</height>
+             <width>540</width>
+             <height>687</height>
             </rect>
            </property>
            <attribute name="label">
@@ -1695,8 +1695,8 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>284</width>
-             <height>402</height>
+             <width>362</width>
+             <height>496</height>
             </rect>
            </property>
            <attribute name="label">
@@ -2805,7 +2805,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1113</width>
+     <width>1167</width>
      <height>25</height>
     </rect>
    </property>
@@ -2834,6 +2834,7 @@
     </property>
     <addaction name="actionHelp"/>
     <addaction name="actionAuthor"/>
+    <addaction name="actionUpdate"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuHelp"/>
@@ -2862,6 +2863,11 @@
   <action name="actionImport">
    <property name="text">
     <string>Import</string>
+   </property>
+  </action>
+  <action name="actionUpdate">
+   <property name="text">
+    <string>Update</string>
    </property>
   </action>
  </widget>
