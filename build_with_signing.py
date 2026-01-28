@@ -246,8 +246,8 @@ def build_exe():
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True,
-            encoding='utf-8'
+            text=True
+            # 移除 encoding='utf-8' 以避免 Windows 系统工具输出 GBK 编码导致的解码错误
         )
 
         if result.returncode == 0:
@@ -387,7 +387,12 @@ def sign_exe_file_fallback(exe_path):
                 exe_path
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True
+                # 移除 encoding='utf-8' 以避免 Windows 系统工具输出 GBK 编码导致的解码错误
+            )
 
             if result.returncode == 0:
                 print("  ✓ signtool 签名成功!")
@@ -430,8 +435,8 @@ try {{
         result = subprocess.run(
             ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_file],
             capture_output=True,
-            text=True,
-            encoding='utf-8'
+            text=True
+            # 移除 encoding='utf-8' 以避免 PowerShell 输出 GBK 编码导致的解码错误
         )
 
         try:
@@ -464,8 +469,8 @@ def verify_signature(exe_path):
         result = subprocess.run(
             ["powershell", "-Command", ps_command],
             capture_output=True,
-            text=True,
-            encoding='utf-8'
+            text=True
+            # 移除 encoding='utf-8' 以避免 PowerShell 输出 GBK 编码导致的解码错误
         )
 
         output = result.stdout.strip()
