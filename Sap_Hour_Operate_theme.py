@@ -14,7 +14,7 @@ import chicon  # 引用图标
 # from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QVBoxLayout, QPushButton, QAction, QLabel
 from PyQt5.QtCore import QDate
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QFont
 from Get_Data import *
 from File_Operate import *
 from Sap_Function import *
@@ -47,7 +47,11 @@ class MyMainWindow(QMainWindow, Ui_MainWindow):
         self.theme_manager = ThemeManager(QApplication.instance())
         self.init_theme_action()
 
-        self.setGeometry(100, 100, 300, 200)
+        # 设置默认窗口大小和字体
+        self.resize(1400, 950)
+        font = QFont()
+        font.setPointSize(11)
+        QApplication.instance().setFont(font)
 
         self.theme_manager = ThemeManager(QApplication.instance())
 
