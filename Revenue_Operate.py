@@ -666,8 +666,12 @@ class RevenueAllocator:
                 # 确定实际分配上限
                 actual_max_hours = max_hours_per_day
                 
-                # 获取该部门的所有记录
-                dept_records = [r for r in filtered if r['dept'] == dept]
+                # 获取该部门的所有记录，按dept_revenue降序排列（优先分配收入高的订单）
+                dept_records = sorted(
+                    [r for r in filtered if r['dept'] == dept],
+                    key=lambda x: x['dept_revenue'],
+                    reverse=True
+                )
                 
                 # 保持所有记录独立，不合并小工时记录
                 dept_stats[dept] = {
